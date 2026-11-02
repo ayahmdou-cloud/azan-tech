@@ -9,8 +9,8 @@
 <title>أذان تيك</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
-<link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="screen.css">
+<link rel="stylesheet" href="style.css?v=__V__">
+<link rel="stylesheet" href="screen.css?v=__V__">
 </head>
 <body>
 <a class="gear" href="settings.html" title="الإعدادات">⚙</a>
@@ -38,13 +38,13 @@
   <div class="s-cards" id="cards"></div>
 </main>
 
-<script src="praytimes.js"></script>
-<script src="core.js"></script>
+<script src="praytimes.js?v=__V__"></script>
+<script src="core.js?v=__V__"></script>
 <script>if (!AzanTech.S.setupDone) location.replace('setup.html');
   document.getElementById('unlock').onclick = () => { AzanTech.unlock(); document.getElementById('unlock').hidden = true; try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) {} };</script>
-<script src="weather.js"></script>
-<script src="content.js"></script>
-<script src="player.js"></script>
+<script src="weather.js?v=__V__"></script>
+<script src="content.js?v=__V__"></script>
+<script src="player.js?v=__V__"></script>
 <script>
 (function () {
   'use strict';
