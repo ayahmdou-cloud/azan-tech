@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1113">
+<title>القبلة — أذان تيك</title>
+<link rel="icon" href="icon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&display=swap">
+<link rel="stylesheet" href="vendor/leaflet.css">
+<link rel="stylesheet" href="cards.css">
+<style>
+  /* Layout: شريط علوي + معلومات + 3 أوضاع (بوصلة، خريطة، كاميرا) بنفس المساحة */
+  html, body { height: 100%; }
+  .qwrap { max-width: 560px; height: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 10px;
+    padding-block: 12px 14px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .info { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .info div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 8px 6px; text-align: center; font-size: 12px; color: var(--muted); min-width: 0; }
+  .info b { display: block; font-size: 18px; color: var(--text); font-variant-numeric: tabular-nums; direction: ltr; }
+  .tabs3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .tabs3 button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  .stage { flex: 1; min-height: 320px; position: relative; border-radius: 18px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); }
+  .view { position: absolute; inset: 0; }
+  .view[hidden] { display: none; }
+
+  /* البوصلة */
+  .cmp { display: grid; place-items: center; gap: 10px; padding: 14px; align-content: center; }
+  .dialbox { position: relative; width: min(78vw, 330px); aspect-ratio: 1; }
+  .dial { position: absolute; inset: 0; transition: transform .12s linear; }
+  .fixed { position: absolute; inset: 0; pointer-events: none; }
+  .state { font-size: 15px; text-align: center; min-height: 48px; }
+  .state.ok { color: var(--green); font-weight: 700; }
+  .dialbox.ok .ring { stroke: var(--green); }
+
+  /* الكاميرا */
+  video { width: 100%; height: 100%; object-fit: cover; display: block; background: #000; }
+  .ar { position: absolute; inset: 0; pointer-events: none; }
+  .ar .kaaba { position: absolute; top: 42%; width: 64px; height: 64px; margin-left: -32px; margin-top: -32px; transition: left .12s linear; filter: drop-shadow(0 4px 10px rgba(0,0,0,.6)); }
+  .ar .hint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(0,0,0,.6); color: #fff; padding: 8px 14px; border-radius: 12px; font-size: 14px; white-space: nowrap; }
+  .ar .cross { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.35); }
+  .ar.ok .cross { background: var(--green); width: 3px; }
+  .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; gap: 10px; align-content: center; }
+
+  .calib { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
+  .calib svg { flex: none; }
+  .eight { stroke-dasharray: 4 4; animation: dash 1.2s linear infinite; }
+  @keyframes dash { to { stroke-dashoffset: -16; } }
+  .qline { stroke-dasharray: 6 6; }
+</style>
+</head>
+<body>
+<div class="qwrap">
+  <div class="topbar">
+    <a class="btn sm" href="screen.html">→ الشاشة</a><span class="brand2" style="font-size:18px">🧭 القبلة</span><span class="sp"></span><span class="tag" id="where">…</span>
+  </div>
+  <div class="info">
+    <div>اتجاه القبلة<b id="qdeg">—</b></div>
+    <div>اتجاهك هلّق<b id="hdeg">—</b></div>
+    <div>المسافة لمكة<b id="dist">—</b></div>
+  </div>
+  <div class="tabs3">
+    <button data-v="compass" class="on">🧭 بوصلة</button>
+    <button data-v="map">🗺️ خريطة</button>
+    <button data-v="cam">📷 كاميرا</button>
+  </div>
+  <div class="stage">
+    <div class="view cmp" id="v-compass">
+      <div class="dialbox" id="dialbox">
+        <svg class="dial" id="dial" viewBox="-160 -160 320 320" aria-hidden="true">
+          <circle class="ring" r="150" fill="var(--surface-2)" stroke="var(--line)" stroke-width="3"/>
+          <g id="ticks"></g>
+          <text y="-118" text-anchor="middle" font-size="22" font-weight="700" fill="var(--danger)">N</text>
+          <text x="122" y="8" text-anchor="middle" font-size="16" fill="var(--muted)">E</text>
+          <text y="134" text-anchor="middle" font-size="16" fill="var(--muted)">S</text>
+          <text x="-122" y="8" text-anchor="middle" font-size="16" fill="var(--muted)">W</text>
+          <g id="qneedle">
+            <line x1="0" y1="0" x2="0" y2="-112" stroke="var(--accent)" stroke-width="6" stroke-linecap="round"/>
+            <g transform="translate(0,-128)"><rect x="-13" y="-13" width="26" height="26" rx="3" fill="#111"/><rect x="-13" y="-7" width="26" height="4" fill="var(--accent)"/></g>
+          </g>
+          <circle r="8" fill="var(--accent)"/>
+        </svg>
+        <svg class="fixed" viewBox="-160 -160 320 320" aria-hidden="true">
+          <path d="M0 -158 L-10 -140 L10 -140 Z" fill="var(--text)"/>
+        </svg>
+      </div>
+      <div class="state" id="state">اكبس «شغّل البوصلة»</div>
+      <button class="primary" id="start">شغّل البوصلة</button>
+    </div>
+    <div class="view" id="v-map" hidden><div id="qmap" style="position:absolute;inset:0"></div></div>
+    <div class="view" id="v-cam" hidden>
+      <video id="video" playsinline muted></video>
+      <div class="ar" id="ar"><div class="cross"></div>
+        <svg class="kaaba" id="kaaba" viewBox="-20 -20 40 40"><rect x="-16" y="-16" width="32" height="32" rx="3" fill="#111" stroke="#d8b46a" stroke-width="2"/><rect x="-16" y="-9" width="32" height="5" fill="#d8b46a"/></svg>
+        <div class="hint" id="hint">…</div></div>
+      <div class="center" id="camMsg"><p class="muted">الكاميرا بتفرجيك وين الكعبة فوق الصورة.</p><button class="primary" id="camStart">شغّل الكاميرا</button></div>
+    </div>
+  </div>
+  <div class="calib" id="calib">
+    <svg width="54" height="30" viewBox="0 0 54 30" aria-hidden="true"><path class="eight" d="M27 15c-6-8-18-8-18 0s12 8 18 0 18-8 18 0-12 8-18 0" fill="none" stroke="var(--accent)" stroke-width="2.5"/></svg>
+    <span>للدقّة: حرّك الجوال بشكل رقم <b>8</b> بالهوا كم مرة، وبعّده عن الحديد والمغناطيس (السيارة، جراب مغناطيس، لابتوب). تأكّد كمان من الخريطة: الخط لازم يمشي مع الشارع اللي حولك.</span>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+<script src="vendor/leaflet.js"></script>
+<script src="vendor/geomag.js"></script>
+<script src="praytimes.js"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const toast = (t) => { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2800); };
+  const K = PT.KAABA;
+  let pos = null, qibla = null, decl = 0, heading = null, smooth = null, view = 'compass', map = null, wasOk = false;
+  try { const S = JSON.parse(localStorage.getItem('azantech.v1') || '{}'); if (S.pos) pos = { ...S.pos, accuracy: S.accuracy, city: S.city }; } catch (e) { /* */ }
+
+  // تدريجات البوصلة
+  $('ticks').innerHTML = Array.from({ length: 72 }, (_, i) => { const a = i * 5, long = a % 30 === 0; return `<line x1="0" y1="-150" x2="0" y2="${long ? -136 : -143}" stroke="var(--muted)" stroke-width="${long ? 2 : 1}" transform="rotate(${a})"/>`; }).join('');
+
+  function setPos(p) {
+    pos = p;
+    qibla = PT.qibla(p.lat, p.lng);
+    try { decl = Geomag.model(new Date()).point([p.lat, p.lng]).decl || 0; } catch (e) { decl = 0; }
+    $('qdeg').textContent = qibla.toFixed(1) + '°';
+    $('dist').textContent = Math.round(PT.km(p.lat, p.lng, K[0], K[1])).toLocaleString('fr-FR') + ' كم';
+    $('where').textContent = (p.city || 'موقعك') + (p.accuracy ? ' · ±' + Math.round(p.accuracy) + ' م' : '');
+    $('qneedle').setAttribute('transform', `rotate(${qibla})`);
+    if (map) drawMap();
+  }
+  function gps() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition((p) => setPos({ lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, city: pos && pos.city }),
+      () => { if (!pos) toast('اسمح بالموقع حتى نحسب القبلة لمكانك بالضبط'); }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  }
+  if (pos) setPos(pos);
+  gps();
+
+  // ---- البوصلة ----
+  const norm = (a) => ((a % 360) + 360) % 360;
+  const diff = (a, b) => { let d = norm(a - b); if (d > 180) d -= 360; return d; };
+  function onHeading(magHeading, accuracy) {
+    const scr = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+    const trueH = norm(magHeading + decl + scr);
+    smooth = smooth == null ? trueH : norm(smooth + diff(trueH, smooth) * 0.25);
+    heading = smooth;
+    $('hdeg').textContent = Math.round(heading) + '°';
+    $('dial').style.transform = `rotate(${-heading}deg)`;
+    if (qibla == null) return;
+    const d = diff(qibla, heading), ok = Math.abs(d) <= 3;
+    $('dialbox').classList.toggle('ok', ok);
+    $('state').className = 'state' + (ok ? ' ok' : '');
+    $('state').textContent = ok ? '✅ إنت باتجاه القبلة' : (d > 0 ? 'لفّ يمين ' : 'لفّ شمال ') + Math.round(Math.abs(d)) + '°';
+    if (ok && !wasOk && navigator.vibrate) navigator.vibrate(60);
+    wasOk = ok;
+    if (accuracy != null && accuracy > 20) $('calib').style.borderColor = 'var(--warn)';
+    // الكاميرا: الكعبة على الشاشة (زاوية رؤية تقريبية 60°)
+    const x = 50 + (d / 60) * 100;
+    $('kaaba').style.left = Math.max(-20, Math.min(120, x)) + '%';
+    $('ar').classList.toggle('ok', ok);
+    $('hint').textContent = ok ? '✅ الكعبة قدّامك' : Math.abs(d) > 30 ? (d > 0 ? '← لفّ يمين ' : 'لفّ شمال → ') + Math.round(Math.abs(d)) + '°' : (d > 0 ? 'شوي يمين' : 'شوي شمال');
+  }
+  let gotAbs = false;
+  function listen() {
+    window.addEventListener('deviceorientationabsolute', (e) => { if (e.alpha == null) return; gotAbs = true; onHeading(360 - e.alpha); }, true);
+    window.addEventListener('deviceorientation', (e) => {
+      if (e.webkitCompassHeading != null) onHeading(e.webkitCompassHeading, e.webkitCompassAccuracy);
+      else if (!gotAbs && e.absolute && e.alpha != null) onHeading(360 - e.alpha);
+    }, true);
+    setTimeout(() => { if (heading == null) { $('state').textContent = 'جهازك ما عطى بوصلة. استعمل الخريطة: الخط الذهبي هو اتجاه القبلة.'; } }, 3000);
+  }
+  $('start').onclick = async () => {
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const r = await DeviceOrientationEvent.requestPermission(); if (r !== 'granted') return toast('لازم تسمح بالحساسات');
+      }
+    } catch (e) { /* */ }
+    $('start').hidden = true; $('state').textContent = 'حط الجوال مسطّح بإيدك…';
+    listen();
+  };
+
+  // ---- الخريطة ----
+  function gcPoints(a, b, n) { // نقاط على أقصر طريق (دائرة عظمى)
+    const r = Math.PI / 180, [la1, lo1, la2, lo2] = [a[0] * r, a[1] * r, b[0] * r, b[1] * r];
+    const d = 2 * Math.asin(Math.sqrt(Math.sin((la2 - la1) / 2) ** 2 + Math.cos(la1) * Math.cos(la2) * Math.sin((lo2 - lo1) / 2) ** 2));
+    return Array.from({ length: n + 1 }, (_, i) => {
+      const f = i / n, A = Math.sin((1 - f) * d) / Math.sin(d), B = Math.sin(f * d) / Math.sin(d);
+      const x = A * Math.cos(la1) * Math.cos(lo1) + B * Math.cos(la2) * Math.cos(lo2), y = A * Math.cos(la1) * Math.sin(lo1) + B * Math.cos(la2) * Math.sin(lo2), z = A * Math.sin(la1) + B * Math.sin(la2);
+      return [Math.atan2(z, Math.sqrt(x * x + y * y)) / r, Math.atan2(y, x) / r];
+    });
+  }
+  let layers = [];
+  function drawMap() {
+    if (!pos || typeof L === 'undefined') return;
+    if (!map) {
+      map = L.map('qmap', { zoomControl: true }).setView([pos.lat, pos.lng], 18);
+      const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' });
+      const street = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' });
+      sat.addTo(map);
+      L.control.layers({ 'قمر صناعي': sat, 'شوارع': street }, null, { position: 'topleft' }).addTo(map);
+    }
+    layers.forEach((l) => l.remove()); layers = [];
+    const line = gcPoints([pos.lat, pos.lng], K, 200);
+    layers.push(L.polyline(line, { color: '#d8b46a', weight: 4 }).addTo(map));
+    if (pos.accuracy) layers.push(L.circle([pos.lat, pos.lng], { radius: pos.accuracy, color: '#4a90e2', weight: 1, fillOpacity: .12 }).addTo(map));
+    layers.push(L.marker([pos.lat, pos.lng], { icon: L.divIcon({ className: 'me-pin', iconSize: [16, 16] }) }).addTo(map));
+    layers.push(L.marker(K, { icon: L.divIcon({ className: 'mq-pin on', iconSize: [18, 18] }) }).addTo(map).bindTooltip('الكعبة المشرّفة'));
+    map.setView([pos.lat, pos.lng], map.getZoom());
+  }
+
+  // ---- الكاميرا ----
+  let stream = null;
+  $('camStart').onclick = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+      $('video').srcObject = stream; await $('video').play();
+      $('camMsg').hidden = true;
+      if ($('start').hidden === false) $('start').click();
+    } catch (e) { toast('ما قدرت افتح الكاميرا — اسمح بالكاميرا للصفحة'); }
+  };
+
+  document.querySelectorAll('.tabs3 [data-v]').forEach((b) => b.onclick = () => {
+    view = b.dataset.v;
+    document.querySelectorAll('.tabs3 [data-v]').forEach((x) => x.classList.toggle('on', x === b));
+    ['compass', 'map', 'cam'].forEach((v) => { $('v-' + v).hidden = v !== view; });
+    if (view === 'map') { drawMap(); setTimeout(() => map && map.invalidateSize(), 50); }
+    if (view !== 'cam' && stream) { stream.getTracks().forEach((t) => t.stop()); stream = null; $('camMsg').hidden = false; }
+  });
+})();
+</script>
+</body>
+</html>

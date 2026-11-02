@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="theme-color" content="#0b1113"><title>أذان تيك</title><link rel="manifest" href="manifest.json"><link rel="icon" href="icon.svg"></head>
+<body style="background:#0b1113">
+<script>
+  let done = false; try { done = !!(JSON.parse(localStorage.getItem('azantech.v1') || '{}').setupDone); } catch (e) {}
+  location.replace(done ? 'screen.html' : 'setup.html');
+</script>
+</body></html>
