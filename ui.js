@@ -261,7 +261,7 @@
     { key: 'mosque', tab: 'azan', title: '🕌 المسجد والمواقيت', eyebrow: 'المسجد', h: 'اختر مسجدك', body: () => {
       const S = st();
       if (!S.pos) return '<p class="muted">حدّد موقعك أول (قسم الموقع).</p>';
-      const note = { loading: 'عم دوّر على المساجد حولك…', mawaqit: 'من Mawaqit — بالاسم المسجّل ومع مواقيته', osm: 'من الخريطة (OpenStreetMap) بالاسم والعنوان. المسجد اللي مش على Mawaqit، مواقيته بتنحسب لموقعه.', none: 'ما قدرت جيب المساجد' + (ui.mosqueErr ? ' (' + esc(ui.mosqueErr) + ')' : '') + ' — <button class="sm" data-retry>↻ جرّب مرة تانية</button>', '': '' }[ui.mosqueSrc] || '';
+      const note = { loading: '⏳ عم دوّر على المساجد حولك… (أول مرة ممكن تاخد 15 ثانية)', mawaqit: 'من Mawaqit — بالاسم المسجّل ومع مواقيته', osm: 'من الخريطة (OpenStreetMap) بالاسم والعنوان. المسجد اللي مش على Mawaqit، مواقيته بتنحسب لموقعه.', none: 'ما قدرت جيب المساجد' + (ui.mosqueErr ? ' (' + esc(ui.mosqueErr) + ')' : '') + ' — <button class="sm" data-retry>↻ جرّب مرة تانية</button>', '': '' }[ui.mosqueSrc] || '';
       const cur = S.mosque;
       const curNote = S.calc ? '✓ حساب: ' + PT.METHODS[S.calc.method].name + ' · العصر ' + (S.calc.asr === 2 ? 'الحنفي' : 'الجمهور')
         : cur ? '✓ مسجدك: ' + esc(cur.name) + (cur.src === 'mawaqit' ? (A.timesSource() === 'mosque' ? ' · مواقيت المسجد' : ' · المواقيت محسوبة (Mawaqit ما ردّ من المتصفح — بالتطبيق بتجي من المسجد)') : ' · المواقيت محسوبة لموقعه') : '';

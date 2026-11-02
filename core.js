@@ -163,6 +163,14 @@
   }
   /** المساجد حولك: Mawaqit أولاً، وإلا OpenStreetMap */
   async function findMosques(pos) {
+    // نفس المنطقة (±500 م) خلال أسبوع: منرجّع المحفوظ فوراً
+    const ck = 'azantech.mq.' + pos.lat.toFixed(2) + ',' + pos.lng.toFixed(2);
+    try { const c = JSON.parse(localStorage.getItem(ck) || 'null'); if (c && Date.now() - c.at < 7 * 864e5 && c.r.list.length) return c.r; } catch (e) { /* */ }
+    const r = await findMosquesLive(pos);
+    try { if (r.list.length) localStorage.setItem(ck, JSON.stringify({ at: Date.now(), r })); } catch (e) { /* */ }
+    return r;
+  }
+  async function findMosquesLive(pos) {
     // Mawaqit والخريطة بنفس الوقت؛ إذا Mawaqit ردّ منفضّله (فيه المواقيت)، وإلا أول سيرفر خريطة بيردّ
     const maw = mawaqitSearch({ lat: pos.lat, lon: pos.lng }).then((arr) => (arr.length ? arr.slice(0, 20).map((m) => ({ name: m.label || m.name, addr: m.localisation || '', lat: +m.latitude, lng: +m.longitude, slug: m.slug, jumua: m.jumua || '', times: m.times, iqama: m.iqama, src: 'mawaqit' })) : null)).catch(() => null);
     const q = `[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="muslim"](around:10000,${pos.lat},${pos.lng});way["amenity"="place_of_worship"]["religion"="muslim"](around:10000,${pos.lat},${pos.lng});relation["amenity"="place_of_worship"]["religion"="muslim"](around:10000,${pos.lat},${pos.lng}););out center 60;`;
