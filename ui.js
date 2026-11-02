@@ -35,16 +35,39 @@
   function locate() {
     return new Promise((res) => {
       if (!navigator.geolocation) return res({ error: 'هالجهاز ما بيعطي الموقع' });
-      let best = null, done = false;
-      const finish = () => { if (done) return; done = true; navigator.geolocation.clearWatch(w); res(best || { error: 'ما وصل الموقع — اسمح بالموقع للمتصفح وجرّب مرة تانية' }); };
-      // منستنى شوي حتى تتحسّن الدقّة (GPS)
-      const w = navigator.geolocation.watchPosition((p) => {
+      if (!window.isSecureContext) return res({ error: 'لازم تفتح الصفحة بـ https حتى يشتغل الموقع' });
+      let best = null, done = false, w = null;
+      const finish = (err) => { if (done) return; done = true; if (w != null) navigator.geolocation.clearWatch(w); res(best || { error: err || 'ما وصل الموقع' }); };
+      // أول قراءة سريعة، وبعدين منحسّنها بالـ GPS لحد ما الدقّة تصير تحت 30 متر
+      w = navigator.geolocation.watchPosition((p) => {
         if (!best || p.coords.accuracy < best.accuracy) best = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
-        if (best.accuracy <= 25) finish();
-      }, (e) => { if (!best) { done = true; res({ error: e.code === 1 ? 'رفضت إذن الموقع — فعّله من إعدادات المتصفح' : 'ما وصل الموقع' }); } },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
-      setTimeout(finish, 12000);
+        ui.locAcc = best.accuracy; const el = document.querySelector('[data-gps] .muted'); if (el) el.textContent = 'عم حسّن الدقّة… ±' + Math.round(best.accuracy) + ' م';
+        if (best.accuracy <= 30) finish();
+      }, (e) => { if (e.code === 1) finish('رفضت إذن الموقع. فعّله: إعدادات Chrome ← إعدادات المواقع ← الموقع ← اسمح لهالصفحة'); else if (!best && e.code === 3) { /* منكمّل نستنى */ } },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+      setTimeout(() => finish('ما وصل الموقع. شغّل الـ GPS (الموقع) بالجوال، أو حدّد مكانك على الخريطة'), 30000);
+      setTimeout(() => { if (best && best.accuracy <= 150) finish(); }, 15000);
     });
+  }
+  // تحديد الموقع بإيدك على الخريطة
+  function openPin() {
+    const S = st(), s = $('sheet');
+    const start = S.pos || { lat: 48.6921, lng: 6.1844 };
+    s.innerHTML = `<div class="panel"><div class="row"><h2 class="grow">حدّد مكانك</h2><button class="ghost sm" data-x>✕</button></div>
+      <p class="lead">اكبس على الخريطة بمكان بيتك، أو ابحث عن العنوان.</p>
+      <div class="row"><input type="text" id="pinQ" class="grow" placeholder="عنوان أو مدينة"><button class="sm" id="pinFind">🔎</button></div>
+      <div class="map" id="pinMap" style="height:320px"></div>
+      <button class="primary" data-ok disabled>اعتمد هالمكان</button></div>`;
+    s.hidden = false;
+    const m = L.map('pinMap').setView([start.lat, start.lng], S.pos ? 16 : 6); tiles(m);
+    let mk = null, chosen = null;
+    const set = (ll) => { chosen = ll; if (mk) mk.setLatLng(ll); else mk = L.marker(ll, { icon: L.divIcon({ className: 'me-pin', iconSize: [22, 22] }), draggable: true }).addTo(m).on('dragend', (e) => { chosen = e.target.getLatLng(); }); s.querySelector('[data-ok]').disabled = false; };
+    if (S.pos) set(L.latLng(start.lat, start.lng));
+    m.on('click', (e) => set(e.latlng));
+    setTimeout(() => m.invalidateSize(), 60);
+    $('pinFind').onclick = async () => { const g = await A.geocode($('pinQ').value.trim()); if (!g) return toast('ما لقيت هالعنوان'); m.setView([g.lat, g.lng], 17); set(L.latLng(g.lat, g.lng)); };
+    s.querySelector('[data-x]').onclick = () => { m.remove(); s.hidden = true; };
+    s.querySelector('[data-ok]').onclick = async () => { m.remove(); s.hidden = true; await setPlace({ lat: chosen.lat, lng: chosen.lng, accuracy: 5 }, 'pin'); if (MODE === 'settings') loadMosques(); };
   }
   async function setPlace(p, how) {
     const S = st();
@@ -61,7 +84,7 @@
     ui.mosqueSrc = 'loading'; redo();
     const r = await A.findMosques(S.pos);
     const list = r.list.map((m) => ({ ...m, km: PT.km(S.pos.lat, S.pos.lng, m.lat, m.lng) })).sort((a, b) => a.km - b.km).slice(0, 15);
-    ui.mosques = list; ui.mosqueSrc = r.src; redo();
+    ui.mosques = list; ui.mosqueSrc = r.src; ui.mosqueErr = r.error || ''; redo();
     if (list.length) {
       ui.roadLoading = true; redo();
       await A.roadTimes(S.pos, list);
@@ -76,6 +99,13 @@
     toast(m.src === 'osm' ? 'هالمسجد مش على Mawaqit — المواقيت بتنحسب لموقعه' : 'تم: ' + m.name);
     redo();
   }
+  // الخريطة: ألوان طبيعية (CARTO Voyager)، وإذا ما تحمّلت منرجع لـ OpenStreetMap
+  function tiles(m) {
+    let errs = 0, switched = false;
+    const a = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' }).addTo(m);
+    a.on('tileerror', () => { if (++errs >= 3 && !switched) { switched = true; m.removeLayer(a); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(m); } });
+  }
+  window._azTiles = tiles;
   const gmaps = (m) => `https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`;
   const geoUri = (m) => `geo:${m.lat},${m.lng}?q=${m.lat},${m.lng}(${encodeURIComponent(m.name)})`;
 
@@ -86,9 +116,11 @@
     if (map) { map.remove(); map = null; }
     if (typeof L === 'undefined') { el.innerHTML = '<div class="fallback">الخريطة ما تحمّلت</div>'; return; }
     map = L.map(el, { zoomControl: true, attributionControl: true }).setView([S.pos.lat, S.pos.lng], 14);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+    tiles(map);
     if (S.accuracy) L.circle([S.pos.lat, S.pos.lng], { radius: S.accuracy, color: '#4a90e2', weight: 1, fillOpacity: .12 }).addTo(map);
-    L.marker([S.pos.lat, S.pos.lng], { icon: L.divIcon({ className: 'me-pin', iconSize: [16, 16] }) }).addTo(map).bindTooltip('أنت');
+    L.marker([S.pos.lat, S.pos.lng], { icon: L.divIcon({ className: 'me-pin', iconSize: [22, 22] }), draggable: true }).addTo(map)
+      .bindTooltip('أنت — اسحبني إذا الموقع مش دقيق', { permanent: false })
+      .on('dragend', async (e) => { const ll = e.target.getLatLng(); await setPlace({ lat: ll.lat, lng: ll.lng, accuracy: 5 }, 'pin'); loadMosques(); });
     const pts = [[S.pos.lat, S.pos.lng]];
     ui.mosques.forEach((m, i) => {
       const on = S.mosque && S.mosque.lat === m.lat && S.mosque.lng === m.lng;
@@ -219,22 +251,25 @@
     { key: 'loc', tab: 'azan', title: '📍 الموقع والسفر', eyebrow: 'الموقع', h: 'أين أنت الآن؟', lead: 'لنعرض المساجد حولك ونضبط المواقيت والتاريخ والطقس.', body: () => { const S = st(); return `
       <div class="list">
         <button type="button" class="opt ${S.how === 'gps' ? 'on' : ''}" data-gps><span class="rd"></span><span class="t"><b>📍 تحديد موقعي بدقّة (GPS)</b><span class="muted">${ui.locating ? 'عم حدّد موقعك… (حتى 12 ثانية)' : S.how === 'gps' && S.city ? '✓ ' + esc(S.city) + (S.accuracy ? ' · الدقّة ±' + Math.round(S.accuracy) + ' م' : '') : 'يطلب الإذن مرة واحدة'}</span></span></button>
+        <button type="button" class="opt ${S.how === 'pin' ? 'on' : ''}" data-pin><span class="rd"></span><span class="t"><b>📌 حدّد مكاني على الخريطة</b><span class="muted">${S.how === 'pin' && S.city ? '✓ ' + esc(S.city) : 'إذا الـ GPS مش دقيق أو مسكّر'}</span></span></button>
         <div class="opt ${S.how === 'city' ? 'on' : ''}"><span class="rd"></span><span class="t"><b>🏙️ اختيار مدينة</b>
           <span class="row" style="margin-top:6px"><input type="text" id="cityIn" class="grow" placeholder="Nancy، Lyon، Berlin، Istanbul…" value="${S.how === 'city' ? esc(S.city) : ''}"><button class="sm" type="button" data-city>بحث</button></span></span></div>
       </div>
+      ${ui.locErr ? `<div class="note">⚠️ ${esc(ui.locErr)}</div>` : ''}
       <div class="srow"><span class="grow">✈️ عند السفر: اسألني إن كنت أريد مسجد المدينة الجديدة<br><span class="muted">ويبقى مسجد البيت محفوظاً في المفضّلة</span></span>${sw('data-g="travel"', S.travel)}</div>`; } },
 
     { key: 'mosque', tab: 'azan', title: '🕌 المسجد والمواقيت', eyebrow: 'المسجد', h: 'اختر مسجدك', body: () => {
       const S = st();
       if (!S.pos) return '<p class="muted">حدّد موقعك أول (قسم الموقع).</p>';
-      const note = { loading: 'عم دوّر على المساجد حولك…', mawaqit: 'من Mawaqit — بالاسم المسجّل ومع مواقيته', osm: 'من الخريطة (OpenStreetMap) بالاسم والعنوان. المسجد اللي مش على Mawaqit، مواقيته بتنحسب لموقعه.', none: 'ما قدرت جيب المساجد — تأكّد من الإنترنت', '': '' }[ui.mosqueSrc] || '';
+      const note = { loading: 'عم دوّر على المساجد حولك…', mawaqit: 'من Mawaqit — بالاسم المسجّل ومع مواقيته', osm: 'من الخريطة (OpenStreetMap) بالاسم والعنوان. المسجد اللي مش على Mawaqit، مواقيته بتنحسب لموقعه.', none: 'ما قدرت جيب المساجد' + (ui.mosqueErr ? ' (' + esc(ui.mosqueErr) + ')' : '') + ' — <button class="sm" data-retry>↻ جرّب مرة تانية</button>', '': '' }[ui.mosqueSrc] || '';
       const cur = S.mosque;
       const curNote = S.calc ? '✓ حساب: ' + PT.METHODS[S.calc.method].name + ' · العصر ' + (S.calc.asr === 2 ? 'الحنفي' : 'الجمهور')
         : cur ? '✓ مسجدك: ' + esc(cur.name) + (cur.src === 'mawaqit' ? (A.timesSource() === 'mosque' ? ' · مواقيت المسجد' : ' · المواقيت محسوبة (Mawaqit ما ردّ من المتصفح — بالتطبيق بتجي من المسجد)') : ' · المواقيت محسوبة لموقعه') : '';
       return `
         ${curNote ? `<div class="note">${curNote}</div>` : ''}
         <div class="map" id="map"></div>
-        <p class="muted" style="margin:0">${note}${ui.roadLoading ? ' · عم احسب المسافة بالطريق…' : ''}</p>
+        <p class="muted" style="margin:0">📍 النقطة الزرقا هي إنت. إذا مش بمكانها الصح، اسحبها لمكانك.</p>
+        <p class="muted" style="margin:0">${ui.mosqueSrc === 'osm' && !ui.mosques.length ? 'ما لقيت مساجد مسجّلة على الخريطة ضمن 10 كم. اختار «احسب المواقيت»، أو اسحب النقطة لمكان تاني. <button class="sm" data-retry>↻ دوّر مرة تانية</button>' : note}${ui.roadLoading ? ' · عم احسب المسافة بالطريق…' : ''}</p>
         <div class="list">${ui.mosques.map((m, i) => { const on = cur && cur.lat === m.lat && cur.lng === m.lng; return `
           <div class="mitem ${on ? 'on' : ''}" data-m="${i}" role="button" tabindex="0">
             <span class="rd"></span>
@@ -435,7 +470,8 @@
       if (ui.locating) return;
       ui.locating = true; redo();
       const p = await locate(); ui.locating = false;
-      if (p.error) { toast(p.error); redo(); return; }
+      if (p.error) { ui.locErr = p.error; toast(p.error); redo(); return; }
+      ui.locErr = '';
       await setPlace(p, 'gps');
       toast('الدقّة ±' + Math.round(p.accuracy) + ' م');
       if (MODE === 'settings') loadMosques();
@@ -458,6 +494,8 @@
     });
     q('[data-favgo]').forEach((b) => b.onclick = () => { const f = S.favs[+b.dataset.favgo]; S.mosque = { ...f, times: null, iqama: null, timesDate: '' }; S.calc = null; save(); A.refreshMosque().then(redo); redo(); toast('صار مسجدك: ' + f.name); });
     q('[data-calc]').forEach((b) => b.onclick = () => openCalc());
+    q('[data-retry]').forEach((b) => b.onclick = () => loadMosques());
+    q('[data-pin]').forEach((b) => b.onclick = () => openPin());
     // المكتبة
     q('[data-azan]').forEach((b) => b.onclick = () => { S.azan = b.dataset.azan; save(); redo(); });
     q('[data-fajr]').forEach((b) => b.onclick = () => { S.fajr = S.fajr === b.dataset.fajr ? '' : b.dataset.fajr; save(); redo(); });

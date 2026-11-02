@@ -193,7 +193,7 @@
     if (!map) {
       map = L.map('qmap', { zoomControl: true }).setView([pos.lat, pos.lng], 18);
       const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Esri' });
-      const street = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '© OpenStreetMap © CARTO' });
+      const street = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' });
       sat.addTo(map);
       L.control.layers({ 'قمر صناعي': sat, 'شوارع': street }, null, { position: 'topleft' }).addTo(map);
     }
