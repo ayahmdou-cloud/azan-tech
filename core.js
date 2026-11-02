@@ -163,28 +163,28 @@
   }
   /** المساجد حولك: Mawaqit أولاً، وإلا OpenStreetMap */
   async function findMosques(pos) {
-    try {
-      const arr = await mawaqitSearch({ lat: pos.lat, lon: pos.lng });
-      if (arr.length) return { src: 'mawaqit', list: arr.slice(0, 20).map((m) => ({ name: m.label || m.name, addr: m.localisation || '', lat: +m.latitude, lng: +m.longitude, slug: m.slug, jumua: m.jumua || '', times: m.times, iqama: m.iqama, src: 'mawaqit' })) };
-    } catch (e) { /* Mawaqit ما بيسمح للمتصفح — منكمّل بالخريطة */ }
+    // Mawaqit والخريطة بنفس الوقت؛ إذا Mawaqit ردّ منفضّله (فيه المواقيت)، وإلا أول سيرفر خريطة بيردّ
+    const maw = mawaqitSearch({ lat: pos.lat, lon: pos.lng }).then((arr) => (arr.length ? arr.slice(0, 20).map((m) => ({ name: m.label || m.name, addr: m.localisation || '', lat: +m.latitude, lng: +m.longitude, slug: m.slug, jumua: m.jumua || '', times: m.times, iqama: m.iqama, src: 'mawaqit' })) : null)).catch(() => null);
     const q = `[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="muslim"](around:10000,${pos.lat},${pos.lng});way["amenity"="place_of_worship"]["religion"="muslim"](around:10000,${pos.lat},${pos.lng});relation["amenity"="place_of_worship"]["religion"="muslim"](around:10000,${pos.lat},${pos.lng}););out center 60;`;
-    // أكتر من سيرفر: إذا واحد مشغول منجرّب اللي بعده
     const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-    let lastErr = '';
-    for (const url of servers) {
-      try {
-        const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: timeout(20000) });
-        if (!r.ok) { lastErr = 'HTTP ' + r.status; continue; }
-        const j = await r.json();
-        const list = (j.elements || []).map((e) => {
-          const t = e.tags || {}, lat = e.lat || (e.center && e.center.lat), lng = e.lon || (e.center && e.center.lon);
-          const addr = [[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:postcode'], t['addr:city']].filter(Boolean).join('، ');
-          return { name: t['name:ar'] || t.name || t['name:fr'] || 'مسجد / مصلّى', addr, lat, lng, src: 'osm' };
-        }).filter((m) => m.lat);
-        return { src: 'osm', list };
-      } catch (e) { lastErr = e.name === 'AbortError' ? 'السيرفر ما ردّ' : e.message; }
-    }
-    return { src: 'none', list: [], error: lastErr };
+    const one = async (url) => {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q), signal: timeout(25000) });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const j = await r.json();
+      if (!j || !Array.isArray(j.elements)) throw new Error('رد غريب');
+      return j.elements.map((e) => {
+        const t = e.tags || {}, lat = e.lat || (e.center && e.center.lat), lng = e.lon || (e.center && e.center.lon);
+        const addr = [[t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' '), t['addr:postcode'], t['addr:city']].filter(Boolean).join('، ');
+        return { name: t['name:ar'] || t.name || t['name:fr'] || 'مسجد / مصلّى', addr, lat, lng, src: 'osm' };
+      }).filter((m) => m.lat);
+    };
+    const osm = Promise.any(servers.map(one)).catch((e) => ({ error: (e.errors && e.errors[0] && e.errors[0].message) || 'السيرفرات ما ردّت' }));
+    const m = await Promise.race([maw, new Promise((r) => setTimeout(() => r(undefined), 6000))]);
+    if (m) return { src: 'mawaqit', list: m };
+    const o = await osm;
+    if (Array.isArray(o)) return { src: 'osm', list: o };
+    const m2 = await maw; if (m2) return { src: 'mawaqit', list: m2 };
+    return { src: 'none', list: [], error: o.error };
   }
   /** المسافة والوقت بالطريق (سيارة ومشي) لكل مسجد — OSRM */
   async function roadTimes(pos, list) {
