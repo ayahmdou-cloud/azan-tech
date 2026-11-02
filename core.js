@@ -354,8 +354,11 @@
   let wcache = null;
   window.fetch = async function (input, opt) {
     const url = typeof input === 'string' ? input : input.url;
-    const p = new URL(url, location.href).pathname.replace(/^.*\/api\//, '/api/');
-    if (!p.startsWith('/api/')) return realFetch(input, opt);
+    const u = new URL(url, location.href);
+    // بس طلبات الشاشة لنفس الموقع (/api/...) — مش Mawaqit ولا خرائط ولا غيرها
+    if (u.origin !== location.origin) return realFetch(input, opt);
+    const p = u.pathname.replace(/^.*\/api\//, '/api/');
+    if (!/\/api\//.test(u.pathname)) return realFetch(input, opt);
     let body = {}; try { body = opt && opt.body ? JSON.parse(opt.body) : {}; } catch (e) { /* */ }
     if (p === '/api/state') return J(state());
     if (p === '/api/weather') {
