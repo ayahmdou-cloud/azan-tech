@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1113">
+<title>أذان تيك — المرحلة الأولى</title>
+<link rel="icon" href="../icon.svg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Kufi+Arabic:wght@400;600;700&family=Amiri:wght@700&display=swap">
+<link rel="stylesheet" href="../vendor/leaflet.css?v=__V__">
+<style>
+  /* Layout: شاشة تطبيق بعرض الجوال، 4 أبواب تحت، نفس ألوان بطاقات أذان تيك */
+  :root {
+    color-scheme: dark;
+    --bg: #0b1113; --surface: #131c1f; --surface-2: #1a262a; --line: #24343a;
+    --text: #ecebe4; --muted: #8fa19f; --accent: #d8b46a; --accent-ink: #1a1408; --green: #6fb39a; --warn: #e0a15a; --blue: #4a90e2;
+    --f-body: "Noto Kufi Arabic", "Segoe UI", Tahoma, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--f-body); font-size: 15px; line-height: 1.7; }
+  .wrap { max-width: 560px; margin: 0 auto; padding-block: 12px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 12px; }
+  .demo { font-size: 12px; color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 6px 10px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+  h1 { margin: 0; font-size: 20px; color: var(--accent); }
+  h2 { margin: 0; font-size: 17px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .row { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+  .grow { flex: 1; min-width: 0; }
+  button, .btn { background: var(--surface-2); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; font: inherit; font-size: 14px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+  button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+  .sm { padding: 4px 10px; font-size: 13px; border-radius: 10px; }
+  .tag { font-size: 11px; border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 0 8px; white-space: nowrap; }
+  .tag.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 50%, var(--line)); }
+  .tag.gold { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  input[type=text], input[type=time] { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; font: inherit; font-size: 14px; }
+  input[type=range] { accent-color: var(--accent); width: 100%; }
+  .sw { position: relative; width: 44px; height: 26px; flex: none; direction: ltr; display: inline-block; }
+  .sw input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+  .sw span { position: absolute; inset: 0; border-radius: 26px; background: #2a3a40; transition: background .2s; pointer-events: none; }
+  .sw span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--muted); transition: left .2s; }
+  .sw input:checked + span { background: var(--green); }
+  .sw input:checked + span::after { left: 21px; background: #fff; }
+
+  /* الرئيسية */
+  .hero { text-align: center; background: radial-gradient(120% 90% at 50% 0%, #1d2a22 0%, var(--surface) 60%); }
+  .hero .next { font-size: 30px; font-weight: 700; color: var(--accent); }
+  .cd { font-size: 40px; direction: ltr; font-variant-numeric: tabular-nums; letter-spacing: 1px; line-height: 1.2; }
+  .pr { display: grid; grid-template-columns: auto 1fr auto auto; gap: 4px 10px; align-items: center; padding: 10px 2px; border-top: 1px solid var(--line); }
+  .pr:first-child { border-top: 0; }
+  .pr.next { background: color-mix(in srgb, var(--accent) 9%, transparent); border-radius: 12px; padding-inline: 8px; }
+  .pr .n { font-weight: 600; }
+  .pr .t { font-size: 22px; font-variant-numeric: tabular-nums; direction: ltr; }
+  .pr .sub { grid-column: 2 / -1; font-size: 12px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
+  .pr.off .t, .pr.off .n { opacity: .4; }
+  .status { display: grid; gap: 4px; font-size: 13px; }
+  .stopbar { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%); bottom: calc(76px + env(safe-area-inset-bottom, 0px)); background: #5B1F14; color: #fff; border-radius: 14px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; box-shadow: 0 8px 24px rgba(0,0,0,.5); max-width: calc(100% - 32px); }
+  .stopbar[hidden] { display: none; }
+  .stopbar button { background: #fff; color: #5B1F14; border: 0; font-weight: 700; }
+
+  /* المسجد */
+  .map { height: 300px; border-radius: 14px; border: 1px solid var(--line); overflow: hidden; background: #0f1a1d; z-index: 0; }
+  .me-pin { background: #fff; border: 3px solid var(--blue); border-radius: 50%; box-shadow: 0 0 0 6px rgba(74,144,226,.25); }
+  .mq-pin { border: 2px solid #0b1113; border-radius: 50%; background: #9aa; }
+  .mq-pin.mw { background: var(--accent); }
+  .mq-pin.on { background: var(--green); }
+  .mitem { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 10px 12px; border-radius: 14px; background: var(--surface-2); border: 1px solid var(--line); }
+  .mitem.on { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  .mitem .d { color: var(--accent); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .mitem .acts { grid-column: 1 / -1; display: flex; gap: 6px; flex-wrap: wrap; }
+  .mitem .tms { grid-column: 1 / -1; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .linkbox { grid-column: 1 / -1; display: grid; gap: 6px; background: var(--bg); border-radius: 12px; padding: 8px; }
+
+  /* الأصوات */
+  .voice { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+  .voice:first-child { border-top: 0; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 3px 10px; border-radius: 999px; font-size: 12px; background: var(--bg); }
+  .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .vrow { display: grid; grid-template-columns: 64px 1fr 48px auto; gap: 10px; align-items: center; padding: 6px 0; }
+  .pct { direction: ltr; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; text-align: left; }
+
+  .bnav { position: fixed; inset: auto 0 0 0; display: grid; grid-template-columns: repeat(4, 1fr); background: var(--surface); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 50; }
+  .bnav button { background: none; border: 0; border-radius: 0; padding: 8px 4px 9px; display: grid; gap: 0; justify-items: center; font-size: 12px; color: var(--muted); }
+  .bnav button b { font-size: 20px; font-weight: 400; }
+  .bnav button.on { color: var(--accent); }
+  [hidden] { display: none !important; }
+  .toast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: #000d; color: #fff; padding: 9px 16px; border-radius: 12px; font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; max-width: 90%; text-align: center; z-index: 100; }
+  .toast.show { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="demo">معاينة المرحلة الأولى. مواقيت اليوم حقيقية من Mawaqit (10 نوفمبر). الأذان هون بيطلع من الجوال؛ بالتطبيق بيطلع على Baba.</div>
+
+  <!-- ===== الرئيسية ===== -->
+  <section class="view" id="v-home">
+    <div class="card hero">
+      <div class="row" style="justify-content:space-between"><h1>أذان تيك</h1><span class="tag ok" id="hMosqueTag"></span></div>
+      <div class="muted" id="hDate"></div>
+      <div class="muted">الأذان القادم</div>
+      <div class="next" id="hNext">—</div>
+      <div class="cd" id="hCd">--:--:--</div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="row"><h2 class="grow">مواقيت اليوم</h2><span class="muted" id="hSrc"></span></div>
+      <div id="hList"></div>
+    </div>
+    <div class="card status" style="margin-top:12px" id="hStatus"></div>
+  </section>
+
+  <!-- ===== المسجد ===== -->
+  <section class="view" id="v-mosque" hidden>
+    <div class="card">
+      <div class="row"><h2 class="grow">اختر مسجدك</h2><button class="sm" id="locBtn">📍 موقعي</button></div>
+      <div class="map" id="map"></div>
+      <div class="muted" id="locInfo">النقطة الزرقا هي إنت. إذا مش بمكانها الصح، اسحبها.</div>
+      <div class="row muted" style="gap:14px"><span>🟡 مربوط بـ Mawaqit</span><span>⚪ من الخريطة، لسا مش مربوط</span><span>🟢 مسجدك</span></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="muted" id="mNote"></div>
+      <div id="mList" style="display:grid;gap:8px"></div>
+      <div class="linkbox">
+        <b style="font-weight:600">مسجد مش بالقائمة؟</b>
+        <span class="muted">الصق رابط صفحته من Mawaqit (مثلاً mawaqit.net/fr/m/…)</span>
+        <div class="row"><input type="text" id="pasteAny" class="grow" dir="ltr" placeholder="https://mawaqit.net/fr/m/..."><button class="sm" id="pasteAnyBtn">اربط</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== الأصوات ===== -->
+  <section class="view" id="v-sound" hidden>
+    <div class="card">
+      <h2>المؤذّن</h2>
+      <div id="voices"></div>
+      <button class="primary" id="addVoice">＋ أضف مؤذّن من ملفاتك</button>
+      <span class="muted">بالتطبيق: أذاناتك الحالية (الأذان، الفجر، الدعاء) بتنتقل لحالها من أذان البيت.</span>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>الصوت لكل صلاة</h2>
+      <span class="muted">الفجر والعشاء أوطى. ▶ بتجرّب بنفس الصوت.</span>
+      <div id="vols"></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <div class="row"><span class="grow">🤲 الدعاء بعد الأذان</span><label class="sw"><input type="checkbox" id="duaOn"><span></span></label></div>
+      <div class="row"><span class="grow">🔊 إذا Baba ما ردّت: أذّن من التاب<br><span class="muted">وابعتلي رسالة تلغرام</span></span><label class="sw"><input type="checkbox" id="fbOn"><span></span></label></div>
+    </div>
+  </section>
+
+  <!-- ===== الهدوء ===== -->
+  <section class="view" id="v-quiet" hidden>
+    <div class="card">
+      <div class="row"><h2 class="grow">ساعات الهدوء</h2><label class="sw"><input type="checkbox" id="qOn"><span></span></label></div>
+      <span class="muted">أي أذان بهالوقت بيطلع بصوت أوطى.</span>
+      <div class="row"><label class="grow muted">من<br><input type="time" id="qFrom"></label><label class="grow muted">لـ<br><input type="time" id="qTo"></label></div>
+      <div class="vrow"><span>الصوت</span><input type="range" min="5" max="60" id="qVol"><span class="pct" id="qVolV"></span><span></span></div>
+    </div>
+    <div class="card" style="margin-top:12px">
+      <h2>اليوم بهالإعدادات</h2>
+      <div id="qPreview"></div>
+    </div>
+  </section>
+</main>
+
+<div class="stopbar" id="stopbar" hidden><span id="stopTxt">الأذان شغّال</span><button id="stopBtn">إيقاف</button></div>
+<nav class="bnav">
+  <button data-v="home" class="on"><b>🕌</b>الرئيسية</button>
+  <button data-v="mosque"><b>📍</b>المسجد</button>
+  <button data-v="sound"><b>🔊</b>الأصوات</button>
+  <button data-v="quiet"><b>🌙</b>الهدوء</button>
+</nav>
+<div class="toast" id="toast" role="status"></div>
+
+<script src="../vendor/leaflet.js?v=__V__"></script>
+<script>
+(function () {
+  'use strict';
+  const $ = (id) => document.getElementById(id);
+  const esc = (x) => String(x == null ? '' : x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const toast = (t) => { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), 2600); };
+  const NAMES = ['الفجر', 'الظهر', 'العصر', 'المغرب', 'العشاء'];
+
+  // مساجد مربوطة بـ Mawaqit — المعلومات حقيقية من صفحاتها (مواقيت 10 نوفمبر 2026)
+  const MAWAQIT = [
+    { slug: 'al-ihsane-vandoeuvre-les-nancy', name: 'AL Ihsane - Vandoeuvre-Les-Nancy', lat: 48.658636, lng: 6.1885016, t: ['06:18', '12:24', '14:39', '17:06', '18:19'], sunrise: '07:36', iq: ['+10', '+10', '+10', '+5', '19:30'], jumua: '12:55' },
+    { slug: 'elfath-vandoeuvre-les-nancy', name: 'MOSQUÉE EL FATH - Vandoeuvre-lès-nancy', lat: 48.6651736, lng: 6.1865822, t: ['06:18', '12:24', '14:39', '17:06', '18:19'], sunrise: '07:36', iq: ['06:28', '12:34', '14:49', '17:11', '19:30'], jumua: '13:15' },
+    { slug: 'el-houda-nancy', name: 'La Grande Mosquée - Nancy', lat: 48.701518, lng: 6.1557441, t: ['06:18', '12:24', '14:39', '17:06', '18:19'], sunrise: '07:36', iq: ['06:28', '12:34', '14:49', '17:11', '19:00'], jumua: '13:00' },
+    { slug: 'mosquee-3-maisons-nancy-54000-france', name: 'Mosquée 3 maisons - NANCY', lat: 48.7009669, lng: 6.1797844, t: ['06:18', '12:24', '14:39', '17:06', '18:19'], sunrise: '07:36', iq: ['+10', '+10', '+10', '+5', '+10'], jumua: '' },
+    { slug: 'mosquee-el-rahma-hdl-nancy', name: 'MOSQUEE "EL-RAHMA" HDL NANCY - Nancy', lat: 48.703099329517, lng: 6.1599597174744, t: ['06:19', '12:24', '14:39', '17:05', '18:19'], sunrise: '07:37', iq: ['+10', '+10', '+10', '+5', '+10'], jumua: '13:15' },
+  ];
+
+  // الحالة (بتنحفظ بهالمتصفح)
+  const KEY = 'azantech.p1';
+  const DEF = { mosque: 'al-ihsane-vandoeuvre-les-nancy', pos: null, voice: 'v1', fajrVoice: 'v2', vol: [40, 50, 55, 50, 40], on: [true, true, true, true, true], dua: true, fb: true, quiet: { on: true, from: '21:00', to: '07:00', vol: 15 }, links: {}, voices: [] };
+  let S; try { S = Object.assign(JSON.parse(JSON.stringify(DEF)), JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { S = JSON.parse(JSON.stringify(DEF)); }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* */ } };
+  const mosque = () => MAWAQIT.find((m) => m.slug === S.mosque) || MAWAQIT[0];
+
+  // ---------- الوقت ----------
+  const at = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); const d = new Date(); d.setHours(h, m, 0, 0); return d; };
+  const hm = (d) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const iqama = (m, i) => { const v = m.iq[i] || ''; const p = v.match(/^\+(\d+)$/); return p ? hm(new Date(+at(m.t[i]) + p[1] * 60000)) : v; };
+  const mins = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+  function inQuiet(d) {
+    if (!S.quiet.on) return false;
+    const x = d.getHours() * 60 + d.getMinutes(), a = mins(S.quiet.from), b = mins(S.quiet.to);
+    return a <= b ? x >= a && x < b : x >= a || x < b;
+  }
+  const volFor = (i) => { const d = at(mosque().t[i]); return inQuiet(d) ? Math.min(S.vol[i], S.quiet.vol) : S.vol[i]; };
+
+  // ---------- الرئيسية ----------
+  function nextPrayer() {
+    const m = mosque(), now = Date.now();
+    for (let i = 0; i < 5; i++) if (S.on[i] && +at(m.t[i]) > now) return { i, d: at(m.t[i]) };
+    const i = S.on.findIndex(Boolean); if (i < 0) return null;
+    const d = at(m.t[i]); d.setDate(d.getDate() + 1); return { i, d };
+  }
+  function renderHome() {
+    const m = mosque(), nx = nextPrayer(), today = new Date();
+    $('hMosqueTag').textContent = m.name.split(' - ')[0];
+    let hij = ''; try { hij = new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }).format(today); } catch (e) { /* */ }
+    $('hDate').textContent = today.toLocaleDateString('ar', { weekday: 'long', day: 'numeric', month: 'long' }) + (hij ? ' · ' + hij : '');
+    $('hNext').textContent = nx ? NAMES[nx.i] + ' · ' + hm(nx.d) : 'كل الصلوات مطفية';
+    $('hSrc').textContent = 'من ' + m.name.split(' - ')[0];
+    const fri = today.getDay() === 5;
+    $('hList').innerHTML = NAMES.map((n, i) => {
+      const quiet = inQuiet(at(m.t[i]));
+      return `<div class="pr ${nx && nx.i === i && +nx.d - Date.now() < 864e5 ? 'next' : ''} ${S.on[i] ? '' : 'off'}">
+        <label class="sw"><input type="checkbox" data-on="${i}" ${S.on[i] ? 'checked' : ''} aria-label="${n}"><span></span></label>
+        <span class="n">${i === 1 && fri ? 'الجمعة' : n}</span>
+        <span class="t">${i === 1 && fri && m.jumua ? m.jumua : m.t[i]}</span>
+        <button class="sm" data-try="${i}" aria-label="جرّب">▶</button>
+        <span class="sub"><span>الإقامة ${esc(iqama(m, i))}</span><span>🔊 ${volFor(i)}%${quiet ? ' 🌙 هدوء' : ''}</span>${i === 0 ? '<span>🎵 ' + esc(voiceName(S.fajrVoice || S.voice)) + '</span>' : ''}</span>
+      </div>`;
+    }).join('') + (m.jumua && !fri ? `<div class="muted" style="padding-top:8px">صلاة الجمعة بهالمسجد: ${m.jumua}</div>` : '');
+    $('hStatus').innerHTML = `
+      <div>🔊 السماعة: <b>Baba</b> (Google Nest Mini · 192.168.1.66)${S.fb ? ' · إذا ما ردّت: من التاب + تلغرام' : ''}</div>
+      <div>📅 السنة كلها محفوظة · بتتحدّث كل يوم الساعة 3:07 الصبح</div>
+      <div>🌙 الهدوء ${S.quiet.on ? 'من ' + S.quiet.from + ' لـ ' + S.quiet.to + ' على ' + S.quiet.vol + '%' : 'مطفي'}</div>`;
+    $('hList').querySelectorAll('[data-on]').forEach((c) => c.onchange = () => { S.on[+c.dataset.on] = c.checked; save(); renderHome(); });
+    $('hList').querySelectorAll('[data-try]').forEach((b) => b.onclick = () => { const i = +b.dataset.try; play(i === 0 ? (S.fajrVoice || S.voice) : S.voice, volFor(i), 'تجربة أذان ' + NAMES[i] + ' · ' + volFor(i) + '%'); });
+  }
+  setInterval(() => {
+    const nx = nextPrayer(); if (!nx || $('v-home').hidden) return;
+    const s = Math.max(0, Math.floor((nx.d - Date.now()) / 1000));
+    $('hCd').textContent = [Math.floor(s / 3600), Math.floor(s % 3600 / 60), s % 60].map((x) => String(x).padStart(2, '0')).join(':');
+  }, 1000);
+
+  // ---------- الصوت (بالمعاينة من الجوال) ----------
+  let actx = null, audio = new Audio(), stopFn = null;
+  const voicesUrl = {}; // الملفات المضافة بالمعاينة بتعيش طول ما الصفحة مفتوحة
+  const BUILT = [{ id: 'v1', name: 'أذانك الحالي (من أذان البيت)', builtin: true }, { id: 'v2', name: 'أذان الفجر الحالي (من أذان البيت)', builtin: true }];
+  const voices = () => [...BUILT, ...S.voices];
+  const voiceName = (id) => (voices().find((v) => v.id === id) || BUILT[0]).name;
+  function tone(vol) {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume();
+    const g = actx.createGain(); g.gain.value = vol; g.connect(actx.destination);
+    const notes = [[392, 0], [440, .7], [494, 1.4], [523, 2.1]];
+    const os = notes.map(([f, t]) => { const o = actx.createOscillator(), e = actx.createGain(); o.frequency.value = f; e.gain.setValueAtTime(0, actx.currentTime + t); e.gain.linearRampToValueAtTime(1, actx.currentTime + t + .05); e.gain.exponentialRampToValueAtTime(.001, actx.currentTime + t + .65); o.connect(e); e.connect(g); o.start(actx.currentTime + t); o.stop(actx.currentTime + t + .7); return o; });
+    const tm = setTimeout(stop, 3000); return () => { clearTimeout(tm); os.forEach((o) => { try { o.stop(); } catch (e) { /* */ } }); };
+  }
+  async function play(id, pct, label) {
+    stop();
+    const v = voices().find((x) => x.id === id);
+    $('stopTxt').textContent = label; $('stopbar').hidden = false;
+    const url = v && voicesUrl[v.id];
+    if (url) { audio.src = url; audio.volume = pct / 100; audio.onended = stop; try { await audio.play(); } catch (e) { stop(); } stopFn = () => audio.pause(); }
+    else { stopFn = tone(pct / 100); toast('بالمعاينة: نغمة بدل الأذان. بالتطبيق: أذانك على Baba'); }
+  }
+  function stop() { if (stopFn) { stopFn(); stopFn = null; } $('stopbar').hidden = true; }
+  $('stopBtn').onclick = stop;
+
+  // ---------- الأصوات ----------
+  function renderSound() {
+    $('voices').innerHTML = voices().map((v) => `
+      <div class="voice"><button class="sm" data-play="${v.id}">▶</button><span class="grow">${esc(v.name)} ${v.builtin ? '<span class="tag gold">ملفك</span>' : '<span class="tag">مضاف</span>'}</span>
+        <span class="chips"><button class="chip ${S.voice === v.id ? 'on' : ''}" data-v="${v.id}">للصلوات</button><button class="chip ${S.fajrVoice === v.id ? 'on' : ''}" data-f="${v.id}">للفجر</button></span></div>`).join('');
+    $('vols').innerHTML = NAMES.map((n, i) => `<div class="vrow"><span>${n}</span><input type="range" min="0" max="100" value="${S.vol[i]}" data-vol="${i}" aria-label="صوت ${n}"><span class="pct" data-vv="${i}">${S.vol[i]}%</span><button class="sm" data-t="${i}">▶</button></div>`).join('');
+    $('duaOn').checked = S.dua; $('fbOn').checked = S.fb;
+    $('voices').querySelectorAll('[data-play]').forEach((b) => b.onclick = () => play(b.dataset.play, 60, 'استماع: ' + voiceName(b.dataset.play)));
+    $('voices').querySelectorAll('[data-v]').forEach((b) => b.onclick = () => { S.voice = b.dataset.v; save(); renderSound(); });
+    $('voices').querySelectorAll('[data-f]').forEach((b) => b.onclick = () => { S.fajrVoice = b.dataset.f; save(); renderSound(); });
+    $('vols').querySelectorAll('[data-vol]').forEach((r) => { r.oninput = () => { S.vol[+r.dataset.vol] = +r.value; $('vols').querySelector(`[data-vv="${r.dataset.vol}"]`).textContent = r.value + '%'; }; r.onchange = save; });
+    $('vols').querySelectorAll('[data-t]').forEach((b) => b.onclick = () => { const i = +b.dataset.t; play(i === 0 ? S.fajrVoice : S.voice, S.vol[i], 'تجربة ' + NAMES[i] + ' · ' + S.vol[i] + '%'); });
+  }
+  $('duaOn').onchange = () => { S.dua = $('duaOn').checked; save(); };
+  $('fbOn').onchange = () => { S.fb = $('fbOn').checked; save(); };
+  $('addVoice').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'audio/*';
+    inp.onchange = () => { const f = inp.files[0]; if (!f) return; const v = { id: 'u' + Date.now(), name: f.name.replace(/\.[a-z0-9]+$/i, ''), url: URL.createObjectURL(f) }; S.voices.push({ id: v.id, name: v.name }); voicesUrl[v.id] = v.url; save(); renderSound(); toast('انضاف: ' + v.name); };
+    inp.click();
+  };
+
+  // ---------- الهدوء ----------
+  function renderQuiet() {
+    $('qOn').checked = S.quiet.on; $('qFrom').value = S.quiet.from; $('qTo').value = S.quiet.to; $('qVol').value = S.quiet.vol; $('qVolV').textContent = S.quiet.vol + '%';
+    const m = mosque();
+    $('qPreview').innerHTML = NAMES.map((n, i) => { const q = inQuiet(at(m.t[i])); return `<div class="vrow"><span>${n}</span><span style="direction:ltr;text-align:right;font-variant-numeric:tabular-nums">${m.t[i]}</span><span class="pct">${volFor(i)}%</span><span>${q ? '🌙' : ''}</span></div>`; }).join('');
+  }
+  ['qOn', 'qFrom', 'qTo', 'qVol'].forEach((id) => $(id).addEventListener(id === 'qVol' ? 'input' : 'change', () => {
+    S.quiet = { on: $('qOn').checked, from: $('qFrom').value || '21:00', to: $('qTo').value || '07:00', vol: +$('qVol').value }; save(); renderQuiet();
+  }));
+
+  // ---------- المسجد ----------
+  let map = null, others = [], meMk = null, layer = null;
+  const km = (a, b) => { const r = Math.PI / 180, dA = (b.lat - a.lat) * r, dO = (b.lng - a.lng) * r; const h = Math.sin(dA / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dO / 2) ** 2; return 2 * 6371 * Math.asin(Math.sqrt(h)); };
+  const fmtM = (m) => m < 1000 ? Math.round(m) + ' م' : (m / 1000).toFixed(1).replace('.', ',') + ' كم';
+  const fmtT = (s) => Math.round(s / 60) + ' د';
+  const here = () => S.pos || { lat: 48.6650, lng: 6.1720 };
+  function initMap() {
+    if (map || typeof L === 'undefined') return;
+    map = L.map('map').setView([here().lat, here().lng], 14);
+    let errs = 0, sw = false;
+    const a = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '© OpenStreetMap © CARTO' }).addTo(map);
+    a.on('tileerror', () => { if (++errs >= 3 && !sw) { sw = true; map.removeLayer(a); L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); } });
+    layer = L.layerGroup().addTo(map);
+    meMk = L.marker([here().lat, here().lng], { icon: L.divIcon({ className: 'me-pin', iconSize: [20, 20] }), draggable: true, zIndexOffset: 1000 }).addTo(map)
+      .on('dragend', (e) => { const p = e.target.getLatLng(); S.pos = { lat: p.lat, lng: p.lng }; save(); $('locInfo').textContent = 'تم: حدّدت مكانك بإيدك'; refreshAll(); });
+    if (!S.pos) locate();
+    loadOthers(); refreshAll();
+  }
+  function locate() {
+    if (!navigator.geolocation) return;
+    $('locInfo').textContent = 'عم حدّد موقعك…';
+    let best = null;
+    const w = navigator.geolocation.watchPosition((p) => {
+      if (!best || p.coords.accuracy < best.accuracy) best = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
+      $('locInfo').textContent = 'موقعك بدقّة ±' + Math.round(best.accuracy) + ' م' + (best.accuracy > 50 ? ' (عم تتحسّن…)' : ' ✓');
+      if (best.accuracy <= 30) done();
+    }, (e) => { $('locInfo').textContent = e.code === 1 ? 'رفضت إذن الموقع — اسحب النقطة الزرقا لمكانك' : 'ما وصل الموقع — شغّل الـ GPS أو اسحب النقطة'; }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+    const done = () => { navigator.geolocation.clearWatch(w); if (best) { S.pos = { lat: best.lat, lng: best.lng }; save(); meMk.setLatLng([best.lat, best.lng]); map.setView([best.lat, best.lng], 15); loadOthers(); refreshAll(); } };
+    setTimeout(done, 20000);
+  }
+  $('locBtn').onclick = () => { initMap(); locate(); };
+  async function loadOthers() {
+    const p = here();
+    $('mNote').textContent = 'عم دوّر على كل المساجد حولك…';
+    const q = `[out:json][timeout:25];(node["amenity"="place_of_worship"]["religion"="muslim"](around:8000,${p.lat},${p.lng});way["amenity"="place_of_worship"]["religion"="muslim"](around:8000,${p.lat},${p.lng}););out center 40;`;
+    const servers = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+    try {
+      const els = await Promise.any(servers.map(async (u) => { const r = await fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) }); if (!r.ok) throw new Error(r.status); return (await r.json()).elements; }));
+      others = els.map((e) => { const t = e.tags || {}; return { name: t.name || t['name:fr'] || 'مسجد / مصلّى', lat: e.lat || e.center.lat, lng: e.lon || e.center.lon, addr: [t['addr:street'], t['addr:city']].filter(Boolean).join('، ') }; })
+        // اللي قريب كتير من مسجد مربوط بـ Mawaqit هو نفسه — ما منكرّره
+        .filter((o) => !MAWAQIT.some((m) => km(o, m) < 0.15));
+    } catch (e) { others = []; }
+    refreshAll();
+  }
+  async function roads(list) {
+    const p = here(), coords = [p, ...list].map((x) => x.lng.toFixed(6) + ',' + x.lat.toFixed(6)).join(';');
+    const dst = list.map((_, i) => i + 1).join(';');
+    const get = async (prof, base) => { try { const j = await (await fetch(`${base}/table/v1/${prof}/${coords}?sources=0&destinations=${dst}&annotations=duration,distance`)).json(); return j.code === 'Ok' ? j : null; } catch (e) { return null; } };
+    const [car, foot] = await Promise.all([get('driving', 'https://routing.openstreetmap.de/routed-car'), get('foot', 'https://routing.openstreetmap.de/routed-foot')]);
+    list.forEach((m, i) => { if (car) { m.road = car.distances[0][i]; m.drive = car.durations[0][i]; } if (foot) m.walk = foot.durations[0][i]; });
+  }
+  let rendering = 0;
+  async function refreshAll() {
+    const p = here();
+    const list = [...MAWAQIT.map((m) => ({ ...m, mw: true })), ...others.map((o) => ({ ...o, mw: false }))].map((m) => ({ ...m, km: km(p, m) })).sort((a, b) => a.km - b.km).slice(0, 14);
+    const my = ++rendering;
+    drawList(list);
+    await roads(list);
+    if (my !== rendering) return;
+    list.sort((a, b) => (a.road ?? a.km * 1e3) - (b.road ?? b.km * 1e3));
+    drawList(list);
+  }
+  function drawList(list) {
+    if (layer) {
+      layer.clearLayers();
+      list.forEach((m) => {
+        const on = m.mw && m.slug === S.mosque;
+        L.marker([m.lat, m.lng], { icon: L.divIcon({ className: 'mq-pin' + (m.mw ? ' mw' : '') + (on ? ' on' : ''), iconSize: on ? [20, 20] : [14, 14] }) }).addTo(layer).bindPopup('<b>' + esc(m.name) + '</b>');
+      });
+    }
+    $('mNote').textContent = 'الأقرب بالطريق أول. المساجد اللي عليها 🟡 جاهزة، والباقي بتربطه بـ Mawaqit مرة وحدة.';
+    $('mList').innerHTML = list.map((m, k) => {
+      const on = m.mw && m.slug === S.mosque;
+      const dist = m.road != null ? `${fmtM(m.road)}${m.drive != null ? ' · 🚗 ' + fmtT(m.drive) : ''}${m.walk != null ? ' · 🚶 ' + fmtT(m.walk) : ''}` : m.km.toFixed(1).replace('.', ',') + ' كم';
+      const g = `https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lng}`;
+      return `<div class="mitem ${on ? 'on' : ''}">
+        <span><b style="font-weight:600">${esc(m.name)}</b> ${m.mw ? '<span class="tag gold">Mawaqit</span>' : '<span class="tag">مش مربوط</span>'} ${on ? '<span class="tag ok">مسجدك</span>' : ''}</span>
+        <span class="d">${dist}</span>
+        ${m.mw ? `<span class="tms">الفجر ${m.t[0]} · الظهر ${m.t[1]} · العصر ${m.t[2]} · المغرب ${m.t[3]} · العشاء ${m.t[4]}${m.jumua ? ' · الجمعة ' + m.jumua : ''}</span>` : (m.addr ? `<span class="tms">${esc(m.addr)}</span>` : '')}
+        <span class="acts">
+          ${m.mw ? (on ? '' : `<button class="sm primary" data-pick="${m.slug}">اختار هالمسجد</button>`) : `<a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent('site:mawaqit.net ' + m.name)}">🔎 لاقيه بـ Mawaqit</a><button class="sm" data-link="${k}">🔗 الصق الرابط</button>`}
+          <a class="btn sm" href="${g}" target="_blank" rel="noopener">🧭 خذني</a>
+        </span>
+        <div class="linkbox" data-box="${k}" hidden><div class="row"><input type="text" class="grow" dir="ltr" placeholder="https://mawaqit.net/fr/m/..."><button class="sm" data-save="${k}">اربط</button></div></div>
+      </div>`;
+    }).join('');
+    $('mList').querySelectorAll('[data-pick]').forEach((b) => b.onclick = () => { S.mosque = b.dataset.pick; save(); toast('صار مسجدك: ' + mosque().name); refreshAll(); renderHome(); });
+    $('mList').querySelectorAll('[data-link]').forEach((b) => b.onclick = () => { const bx = $('mList').querySelector(`[data-box="${b.dataset.link}"]`); bx.hidden = !bx.hidden; });
+    $('mList').querySelectorAll('[data-save]').forEach((b) => b.onclick = () => linkMsg(b.closest('.linkbox').querySelector('input').value));
+  }
+  function linkMsg(v) {
+    const s = (String(v).match(/mawaqit\.net\/(?:[a-z]{2}\/)?(?:m\/|w\/)?([a-z0-9-]+)/i) || [])[1];
+    if (!s) return toast('هالرابط مش رابط مسجد من Mawaqit');
+    toast('بالتطبيق: بيجيب رزنامة «' + s + '» ويصير مسجدك');
+  }
+  $('pasteAnyBtn').onclick = () => linkMsg($('pasteAny').value);
+
+  // ---------- التنقّل ----------
+  document.querySelectorAll('.bnav [data-v]').forEach((b) => b.onclick = () => {
+    document.querySelectorAll('.bnav [data-v]').forEach((x) => x.classList.toggle('on', x === b));
+    document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== 'v-' + b.dataset.v; });
+    if (b.dataset.v === 'home') renderHome();
+    if (b.dataset.v === 'mosque') { initMap(); setTimeout(() => map && map.invalidateSize(), 60); }
+    if (b.dataset.v === 'sound') renderSound();
+    if (b.dataset.v === 'quiet') renderQuiet();
+    window.scrollTo(0, 0);
+  });
+  renderHome();
+})();
+</script>
+</body>
+</html>

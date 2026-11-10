@@ -23,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: رقم النسخة بأسماء الملفات (حتى ما يضل القديم بالكاش)
-        run: sed -i "s/__V__/${GITHUB_SHA::7}/g" *.html
+        run: sed -i "s/__V__/${GITHUB_SHA::7}/g" *.html phase1/*.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
